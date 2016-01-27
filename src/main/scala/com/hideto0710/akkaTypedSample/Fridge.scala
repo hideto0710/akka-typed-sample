@@ -25,6 +25,7 @@ object Fridge {
   sealed trait Action
   case class Store(food: String, replyTo: ActorRef[Result]) extends Action
   case class Take(food: String, replyTo: ActorRef[Result]) extends Action
+  case object Close extends Action
 
   def fridge(foodList: Seq[String]): Behavior[Action] = SelfAware[Action] { self =>
     Total[Action] {
@@ -39,6 +40,9 @@ object Fridge {
       case Take(food, replyTo) if !foodList.contains(food) =>
         replyTo ! Result(self, NotFound)
         Same
+
+      case Close =>
+        Stopped
     }
   }
 }
@@ -55,14 +59,15 @@ object FridgeApp extends App {
     case Sig(ctx, PreStart) =>
       val h = ctx.spawn(Props(handler), "handler")
       val f = ctx.spawn(Props(fridge(Seq.empty)), "fridge")
-
+      ctx.watch(f)
       f ! Store("milk", h)
       f ! Store("bacon", h)
       f ! Take("bacon", h)
       f ! Take("turkey", h)
+      f ! Close
+      Same
 
-      // waiting...
-      Thread.sleep(500)
+    case Sig(_, Terminated(ref)) ⇒
       Stopped
   }
 
